@@ -1,0 +1,10 @@
+project_id = "project-404"
+
+[auth]
+enabled = true
+enable_anonymous_sign_ins = false
+
+[functions.game]
+verify_jwt = false
+# The function validates every token with Auth.getUser(). This supports current
+# asymmetric signing keys while retaining server-verified authentication.

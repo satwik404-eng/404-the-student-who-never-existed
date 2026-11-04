@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.data/
+playwright-report/
+test-results/
+*.log
+.DS_Store
+.vercel
+.env*
+
+!.env.example
+
+supabase/.temp/

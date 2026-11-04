@@ -1,0 +1,12 @@
+.git
+.data
+.env*
+!.env.example
+node_modules
+work
+test-results
+playwright-report
+supabase/functions/game
+supabase/migrations
+server
+tests
