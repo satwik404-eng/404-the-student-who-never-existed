@@ -47,6 +47,10 @@ export function IdentityGate({
   if (!identity.ready) return <Loading />;
   if (supabase && !identity.user) return <Navigate to="/login" replace />;
   if (game.loading) return <Loading />;
+  // Auth events can switch users in another tab without reloading this page.
+  // Never render a prior actor's state while the replacement is being loaded.
+  if (supabase && identity.user && game.state && game.state.id !== identity.user.id)
+    return <Loading />;
   if (game.error)
     return (
       <div className="connection-error">

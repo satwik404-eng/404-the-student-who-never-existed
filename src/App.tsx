@@ -2,6 +2,7 @@ import {
   Component,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -53,7 +54,6 @@ import {
 } from "./Auth";
 import { supabase } from "./client";
 import { Loading, Modal } from "./ui";
-const loadedActors = new Set<string>();
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { failed: boolean }
@@ -83,6 +83,7 @@ export function App() {
   const prefs = usePrefs();
   const game = useGame();
   const identity = useIdentity();
+  const activeActor = useRef<string | null>(null);
   const closeGuide = useCallback(() => setGuide(false), []);
   useEffect(() => {
     initializeIdentity();
@@ -90,14 +91,10 @@ export function App() {
   useEffect(() => {
     if (!identity.ready) return;
     const actor = supabase ? identity.user?.id : "local";
-    if (!actor) {
-      useGame.getState().reset();
-      return;
-    }
-    if (!loadedActors.has(actor)) {
-      loadedActors.add(actor);
-      void useGame.getState().refresh();
-    }
+    if (activeActor.current === (actor || null)) return;
+    activeActor.current = actor || null;
+    useGame.getState().reset();
+    if (actor) void useGame.getState().refresh();
   }, [identity.ready, identity.user]);
   useEffect(() => {
     document.documentElement.dataset.reduced = String(prefs.reduced);
