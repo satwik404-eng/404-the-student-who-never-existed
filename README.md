@@ -6,6 +6,12 @@ A playable browser mystery created by **Satwik**. Recover Aarya Sen's erased ide
 
 The visual direction uses midnight black, electric cobalt and acid lime, with original SVG artwork. No paid image or AI service is required.
 
+## Cinematic story upgrade (feature branch)
+
+Version 3 adds a five-scene, approximately 50-second **The Purge** prologue after sign-in and detective-name registration. A public transmission teaser contains no operator-deletion scene. All six chapters gain distinct replayable introductions, skippable recovery events, an evolving suspect board, browser-local theories/evidence connections, progression-aware ECHO dialogue and expanded endings with a recovered-perspective replay.
+
+The original puzzles, saves, rewards, both endings and multiplayer are retained. Story revelations are projected by the server from verified existing progress; no save reset is required. The security follow-up includes a ranking index/RPC migration. See [NARRATIVE_UPGRADE.md](NARRATIVE_UPGRADE.md) for the implementation and release checklist. This feature branch is **not published to production**.
+
 ## Play locally
 
 Use Node **24 LTS** and npm.
@@ -33,7 +39,7 @@ Do not expose the development server on the public Internet. `npm run preview` p
 - An always-accessible free field guide with vague, atmospheric direction. Optional ECHO hints never state solutions.
 - Deterministic ECHO dialogue and original optional interface audio.
 - Real two-player rooms, complementary private clues, readiness, chat, reconnection, shared completion, room quotas and expiry cleanup.
-- Google-only production sign-in, PKCE callback, detective-name onboarding and browser-specific investigation saves. Apple support is prepared but deferred.
+- Google-only production sign-in, PKCE callback, detective-name onboarding and account-wide investigation and cinematic history. Apple support is prepared but deferred.
 - Opt-in rankings built only from genuine server-verified completions; no fabricated players or scores.
 - Desktop/mobile layouts, keyboard controls, focus-trapped guide, reduced motion and muted-by-default audio.
 - Completion credits link to Satwik's GitHub profile and this repository. Set `VITE_LINKEDIN_URL` when the exact profile is available.
@@ -44,9 +50,9 @@ See [DATABASE.md](DATABASE.md), [DEPLOYMENT.md](DEPLOYMENT.md) and [OAUTH_SETUP.
 
 Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are public browser configuration. They are not service credentials. OAuth client secrets and the Supabase service-role key never belong in Vite variables, source or Git.
 
-Each production save is bound to the authenticated account **and** a random identifier retained in that browser. Another browser gets its own investigation. Clearing browser storage loses that browser's resume identifier. The authoritative progress remains on the server to prevent score tampering.
+Each production investigation is bound to the verified account. Signing in with the same account in another browser resumes progress and skips already reached/viewed cutscenes. A new browser does not award duplicate XP or create a second save. Theories, evidence links, terminal transcripts and audio preferences stay local.
 
-An account can allocate up to ten browser saves. This prevents repeated UUID changes from allocating unlimited database rows; a self-service save manager is a future improvement.
+The server imports the furthest existing owned browser save as a whole on first use, preserving attempts, hints, evidence, score and completion time. Old records are retained. A reached chapter’s intro and the opening do not autoplay again after that import. Manual Replay remains available.
 
 ## Development checks
 
@@ -71,6 +77,9 @@ The automated browser walkthrough solves all six chapters through actual control
 | `shared/` | Public mission metadata and safe TypeScript contracts |
 | `supabase/functions/_shared/engine.ts` | Trusted rules shared by both backend adapters |
 | `supabase/functions/_shared/hints.ts` | Server-only optional hint text |
+| `supabase/functions/_shared/narrative.ts` | Server-gated evidence, suspect facts, events, ECHO and epilogues |
+| `src/Cinematics.tsx` | Lazy-loaded original SVG prologue and chapter covers |
+| `src/presentation.ts` | Browser-only intro, theory and evidence-connection preferences |
 | `supabase/functions/game/` | Google/Apple-authenticated Edge API and Postgres adapter |
 | `supabase/migrations/` | RLS, service-only CAS transactions, quotas and cleanup |
 | `server/` | Loopback-only SQLite development adapter |

@@ -7,7 +7,7 @@ This game teaches observation and encoding with fictional records. It must never
 - The browser and every request field are untrusted.
 - Production identity is verified by Supabase `Auth.getUser` on each game request. Only Google/Apple OAuth identities are eligible; Google is the launch provider.
 - Player ownership derives from the verified account, never user-editable metadata or a request-supplied UID.
-- Browser identifiers select a save within that same account. They grant no cross-account authority.
+- The verified UID selects the account-wide save. Browser identifiers are presentation metadata and grant no progression or cross-account authority. Legacy import filters both owner UID and valid player keys, and preserves one whole server-owned save.
 - Database writes, score calculation, hints, deadlines, room membership and private clue selection belong to the server.
 - Direct client writes and privileged RPC execution are revoked. RLS controls reads and private Presence.
 - Supabase's publishable key is public configuration, not a service credential. OAuth secrets and service-role keys are server-only.

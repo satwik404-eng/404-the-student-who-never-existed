@@ -1,0 +1,2 @@
+export const publicRankingQuery =
+  "SELECT value FROM (SELECT value,ROW_NUMBER() OVER(PARTITION BY owner ORDER BY CAST(json_extract(value,'$.score') AS INTEGER) DESC,CAST(json_extract(value,'$.seconds') AS INTEGER) ASC) AS n FROM documents d WHERE public=1 AND key LIKE 'ranking:%' AND NOT EXISTS(SELECT 1 FROM documents c WHERE c.key='ranking:'||d.owner AND c.key<>d.key)) WHERE n=1 ORDER BY CAST(json_extract(value,'$.score') AS INTEGER) DESC,CAST(json_extract(value,'$.seconds') AS INTEGER) ASC LIMIT 50";

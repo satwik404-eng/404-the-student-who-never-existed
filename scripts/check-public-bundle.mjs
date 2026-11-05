@@ -14,6 +14,12 @@ const forbidden = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "fragment[01]: WE",
   "STAY WITH ME",
+  "UkVHT0xJVEg=",
+  "AS-042",
+  "0xNULL was Aarya’s emergency preservation identity.",
+  "Aarya attached ECHO to the emergency preservation protocol.",
+  "ARCHIVIST replaced a MIRROR_WRITE caption with IDENTITY PURGE",
+  "The shadow did not change; the accusation did.",
 ];
 for (const text of forbidden)
   if (assets.includes(text))

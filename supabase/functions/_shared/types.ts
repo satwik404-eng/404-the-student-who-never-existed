@@ -26,6 +26,9 @@ export interface Player {
   optIn: boolean;
   roomCodes?: string[];
   roomCreationTimes?: number[];
+  saveVersion?: 2;
+  cinematicsSeen?: number[];
+  rankingKey?: string;
 }
 export interface GameState extends Player {
   score: number;
@@ -33,6 +36,45 @@ export interface GameState extends Player {
   chapter: number;
   hintsUsed: number;
   recoveredHints: Record<string, string[]>;
+  narrative?: NarrativeState;
+}
+export type SuspectId = "null" | "voss" | "archivist" | "echo";
+export interface EvidenceDetail {
+  title: string;
+  label: string;
+  text: string;
+}
+export interface TimelineCard {
+  id: string;
+  time: string;
+  title: string;
+  text: string;
+}
+export interface StoryEvent {
+  title: string;
+  lines: string[];
+  echo: string;
+}
+export interface SuspectProfile {
+  id: SuspectId;
+  name: string;
+  role: string;
+  status: string;
+  unlocked: boolean;
+  known: string[];
+  contradictions: string[];
+  evidence: string[];
+}
+export interface NarrativeState {
+  signal?: string;
+  identity?: { name: string; id: string };
+  evidence: Record<string, EvidenceDetail>;
+  suspects: SuspectProfile[];
+  events: Record<string, StoryEvent>;
+  timeline: TimelineCard[];
+  echo: string;
+  epilogue?: { record: string[]; message: string; echo: string };
+  perspective?: string[];
 }
 export interface ArchiveRecord {
   id: string;

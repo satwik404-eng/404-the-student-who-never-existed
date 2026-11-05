@@ -17,10 +17,11 @@ export function Privacy() {
           password into this website.
         </p>
         <p>
-          Your investigation is saved under your account and a browser-specific
-          identifier. Returning in the same browser resumes it. Clearing browser
-          storage removes that browser’s ability to resume its save; another
-          browser begins a separate investigation.
+          Your investigation and viewed chapter cinematics are saved under your
+          authenticated account. Signing in with the same account in another
+          browser resumes your progress without replaying earlier cutscenes.
+          Theory notes, evidence connections, terminal transcripts and sound
+          preferences remain local to the browser.
         </p>
         <p>
           Progress, evidence, hint usage, score, ending, and completion time are

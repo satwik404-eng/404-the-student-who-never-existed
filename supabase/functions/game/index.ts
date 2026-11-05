@@ -6,7 +6,7 @@ import {
   type Document,
 } from "../_shared/engine.ts";
 import type { Ranking } from "../_shared/types.ts";
-import { readGameRequest } from "../_shared/request.ts";
+import { allowedOrigin, readGameRequest } from "../_shared/request.ts";
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -57,14 +57,31 @@ class PostgresStore implements Store {
     });
   }
   async listPublic() {
+    const { data, error } = await admin.rpc("read_public_rankings");
+    if (error) throw error;
+    return (data || []) as Ranking[];
+  }
+  async listPlayerSaves(uid: string) {
+    // UID comes from Auth.getUser, never from request fields. Capture versions
+    // so concurrent first logins import an old browser save only once via CAS.
     const { data, error } = await admin
       .from("game_documents")
-      .select("value")
-      .eq("is_public", true)
-      .like("key", "ranking:%")
-      .limit(1000);
+      .select("*")
+      .eq("owner_id", uid)
+      .like("key", "player:%")
+      .limit(32);
     if (error) throw error;
-    return (data || []).map((x) => x.value as Ranking);
+    return (data || []).map((row) => {
+      const doc = {
+        key: row.key,
+        value: row.value,
+        version: row.version,
+        owner: row.owner_id,
+        public: row.is_public,
+      };
+      this.reads.set(doc.key, doc);
+      return doc;
+    });
   }
   async commit() {
     for (const key of this.writes.keys())
@@ -83,7 +100,11 @@ class PostgresStore implements Store {
 }
 Deno.serve(async (req: Request) => {
   const cors = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": allowedOrigin(
+      req.headers.get("Origin"),
+      Deno.env.get("ALLOWED_ORIGIN"),
+    ),
+    Vary: "Origin",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -118,7 +139,12 @@ Deno.serve(async (req: Request) => {
     if (Number(req.headers.get("content-length") || 0) > 4096)
       throw new GameError("Request too large.", 413);
     const input = await readGameRequest(req);
-    if (!input.browserId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(input.browserId))
+    if (
+      !input.browserId ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        input.browserId,
+      )
+    )
       throw new GameError("A browser investigation identifier is required.");
     for (let attempt = 0; attempt < 5; attempt++) {
       const store = new PostgresStore();

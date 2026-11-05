@@ -29,10 +29,14 @@ The browser uses PKCE, removes the one-time callback code from the address bar, 
 - Run `npm audit` against the committed npm lockfile.
 - Run `npm run test:bundle`; ensure paid hints/server solutions and source maps are absent from public assets.
 - Confirm the deployed Edge Function and database migrations match the source.
-- Verify OAuth token exchange and browser-specific refresh/resume on the deployed origin.
+- Verify OAuth token exchange and cross-browser account refresh/resume on the deployed origin.
 - Verify two actual authenticated accounts, room privacy and Supabase Realtime delivery.
 - Verify HTTPS, redirects, CSP, framing restrictions and safe error responses on the live hostname.
 - Review database network restrictions, retained daily backups and restore testing separately.
 - Scan all Git history for privileged credentials; never commit `.env*` except `.env.example`.
 
 The website can be public while its GitHub source remains private. The repository credit link will only be visible to GitHub users who have access until the owner chooses to publish the repository.
+
+## Security follow-up release
+
+After owner approval, apply `20261105094913_security_and_rankings.sql` before deploying the new Edge Function and frontend. It adds service-only ordered leaderboard reads, an ordering index, and atomic unpublication of legacy ranking rows when the canonical account ranking is written. Historical records are retained. Set optional `ALLOWED_ORIGIN` only to an exact HTTPS preview origin. The static frontend adds explicit HSTS and COOP headers.

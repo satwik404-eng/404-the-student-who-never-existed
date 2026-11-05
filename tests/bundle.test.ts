@@ -9,8 +9,13 @@ describe("public module boundary", () => {
       "src/Pages.tsx",
       "src/Investigation.tsx",
       "src/Multiplayer.tsx",
+      "src/Cinematics.tsx",
+      "src/Suspects.tsx",
       "shared/content.ts",
-    ])
-      expect(readFileSync(file, "utf8")).not.toContain("_shared/hints");
+    ]) {
+      const source = readFileSync(file, "utf8");
+      expect(source).not.toContain("_shared/hints");
+      expect(source).not.toContain("_shared/narrative");
+    }
   });
 });

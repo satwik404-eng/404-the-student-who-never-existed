@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { usePrefs } from "./store";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, X } from "lucide-react";
 export function Tag({
   children,
@@ -33,10 +34,12 @@ export function Modal({
   title,
   children,
   onClose,
+  closeLabel = "Close guide",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  closeLabel?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -88,7 +91,7 @@ export function Modal({
           <span className="eyebrow">{title}</span>
           <button
             className="icon-button"
-            aria-label="Close guide"
+            aria-label={closeLabel}
             onClick={onClose}
           >
             <X size={20} />
@@ -123,5 +126,30 @@ export function Loading() {
     <div className="loading" role="status">
       <span className="status-dot" /> ESTABLISHING ARCHIVE CONNECTION…
     </div>
+  );
+}
+
+export function ElapsedClock({
+  state,
+}: {
+  state: import("../shared/types").GameState;
+}) {
+  const enabled = usePrefs((x) => x.timer);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled || state.completedAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [enabled, state.completedAt]);
+  if (!enabled || !state.startedAt) return null;
+  const seconds = Math.max(
+    0,
+    Math.floor(((state.completedAt || now) - state.startedAt) / 1000),
+  );
+  return (
+    <span className="mono dim" aria-label="Investigation elapsed time">
+      {String(Math.floor(seconds / 60)).padStart(2, "0")}:
+      {String(seconds % 60).padStart(2, "0")}
+    </span>
   );
 }

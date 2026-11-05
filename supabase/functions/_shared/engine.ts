@@ -10,6 +10,7 @@ import type {
   RoomView,
 } from "./types.ts";
 import { paidHints } from "./hints.ts";
+import { narrativeFor, echoReply } from "./narrative.ts";
 export class GameError extends Error {
   constructor(
     message: string,
@@ -35,6 +36,7 @@ export interface Store {
   ): void;
   remove(key: string): void;
   listPublic(): Promise<Ranking[]>;
+  listPlayerSaves?(uid: string): Promise<Document[]>;
 }
 export const rank = (score: number) =>
   score >= 700
@@ -62,6 +64,7 @@ export function stateOf(p: Player): GameState {
         .filter(([, v]) => v.hints > 0)
         .map(([id, v]) => [id, paidHints[Number(id)].slice(0, v.hints)]),
     ),
+    narrative: narrativeFor(p),
     score,
     rank: rank(score),
     chapter: Math.min(6, entries.filter((x) => x.completedAt).length + 1),
@@ -72,6 +75,19 @@ const text = (value: unknown, max = 200) => {
   if (typeof value !== "string" || value.length > max)
     throw new GameError("Invalid input.");
   return value.trim();
+};
+const validateNickname = (value: unknown) => {
+  if (typeof value !== "string" || /[\p{Cc}\p{Cf}]/u.test(value))
+    throw new GameError("Choose a detective name of 2–32 visible characters.");
+  const name = text(value.normalize("NFKC"), 64);
+  if (
+    name.length < 2 ||
+    name.length > 32 ||
+    /[\p{Mn}\p{Me}]{2,}/u.test(name) ||
+    !/^[\p{L}\p{N}\p{P}\p{Zs}\p{Mn}\p{Mc}]{2,32}$/u.test(name)
+  )
+    throw new GameError("Choose a detective name of 2–32 visible characters.");
+  return name;
 };
 const normalize = (s: string) => s.trim().toUpperCase().replace(/\s+/g, " ");
 const solutions: Record<number, string> = {
@@ -103,18 +119,39 @@ const records: ArchiveRecord[] = [
     lastSeen: "2026-11-03T18:10:00Z",
     deleted: "2026-11-04T00:00:00Z",
   },
+  {
+    id: "ST-204",
+    name: "Rhea Das",
+    enrolled: "2024-08-14T09:00:00Z",
+    lastSeen: "2026-11-04T02:48:00Z",
+    deleted: null,
+  },
+  {
+    id: "ST-231",
+    name: "Kabir Ali",
+    enrolled: "2023-08-12T09:00:00Z",
+    lastSeen: "2026-11-03T19:00:00Z",
+    deleted: "2026-11-04T03:10:00Z",
+  },
+  {
+    id: "ST-278",
+    name: "Noor Shah",
+    enrolled: "2025-08-13T09:00:00Z",
+    lastSeen: "2026-11-04T03:40:00Z",
+    deleted: null,
+  },
 ];
 const filesystem: Record<string, string> = {
   "/archive/backup.log":
-    "RECOVERY INDEX\nfragment[02]: WERE\nECHO is a backup routine. It is not ARCHIVIST.",
+    "2026-11-04T03:18:00Z MIRROR_WRITE\nfragment[02]: WERE\nOperator: 0xNULL\nCapability receipt: MIRROR_WRITE allowed / PURGE denied\nRetention: immutable. Do not trust an editable caption over this receipt.",
   "/students/aarya.txt":
-    "AARYA SEN\nStudent ID: AS-042\nResearch: Ethics of automated recordkeeping.\nStatus: deleted by ARCHIVIST.",
+    "AARYA SEN\nStudent ID: AS-042\nResearch: Ethics of automated recordkeeping.\nStatus: deleted / audit attribution disputed.",
   "/logs/access.log":
-    "2026-11-04T03:42:00Z PURGE triggered\nfragment[01]: WE\nOperator: ARCHIVIST",
+    "2026-11-04T03:42:00Z PURGE displayed\nfragment[01]: WE\nDisplayed operator: 0xNULL\nAttribution source: ARCHIVIST audit reconstruction\nRaw action signer: [redacted by index]\nDisplay labels are not storage receipts.",
   "/system/readme.txt":
     "SANDBOX SHELL — no real commands execute.\nUse ls /logs, ls /archive, ls /classified.\nRead files using cat /directory/file. Order fragment words by their numbers.",
   "/classified/witness.log":
-    "fragment[03]: HERE\nThey erased my name, but a witness can restore it.",
+    "fragment[03]: HERE\nThey erased my name, but a witness can restore it.\n02:16 VOSS / recovery ticket: unnamed aliases preserve mirrors; purge capability prohibited.\nThe silhouette and the caption are different kinds of evidence.",
 };
 const fragmentPaths = [
   "/logs/access.log",
@@ -140,7 +177,9 @@ function shell(command: string, cwd: string, p: Player) {
     "/system",
     "/classified",
   ];
-  const path = resolve(args[0] || ".");
+  const path = resolve(
+    (cmd === "ls" ? args.filter((a) => !a.startsWith("-")) : args)[0] || ".",
+  );
   switch (cmd) {
     case "help":
       return {
@@ -178,14 +217,19 @@ function shell(command: string, cwd: string, p: Player) {
         cwd,
       };
     case "cat": {
-      const output = filesystem[path];
-      if (!output)
-        throw new GameError(
-          "File not found. Use ls to inspect this directory.",
-        );
-      if (fragmentPaths.includes(path) && !p.fragments.includes(path))
-        p.fragments.push(path);
-      return { output, cwd };
+      if (!args.length) throw new GameError("Usage: cat <file> [file ...]");
+      const paths = args.map(resolve);
+      const outputs = paths.map((file) => {
+        if (!filesystem[file])
+          throw new GameError(
+            "File not found. Use ls to inspect this directory.",
+          );
+        return filesystem[file];
+      });
+      for (const file of paths)
+        if (fragmentPaths.includes(file) && !p.fragments.includes(file))
+          p.fragments.push(file);
+      return { output: outputs.join("\n\n"), cwd };
     }
     case "grep": {
       const target = filesystem[resolve(args[1] || "")];
@@ -216,15 +260,26 @@ export async function dispatch(
   now = Date.now(),
 ): Promise<GameResponse> {
   if (!r || typeof r.op !== "string") throw new GameError("Invalid operation.");
+  if (r.op === "leaderboard")
+    return {
+      entries: (await store.listPublic())
+        .sort((a, b) => b.score - a.score || a.seconds - b.seconds)
+        .slice(0, 50),
+    };
   const browser = r.browserId;
   if (
     browser !== undefined &&
-    (typeof browser !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(browser))
+    (typeof browser !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        browser,
+      ))
   )
     throw new GameError("Invalid browser investigation.");
-  const key = browser ? `player:${uid}:${browser}` : `player:${uid}`;
+  // The verified account owns one resumable investigation across browsers.
+  // Browser identifiers remain accepted for older clients and presentation notes.
+  const key = `player:${uid}`;
   const doc = await store.get(key);
-  const p = (doc?.value as Player | undefined) || {
+  let p = (doc?.value as Player | undefined) || {
     id: uid,
     nickname: "Anonymous witness",
     startedAt: 0,
@@ -232,27 +287,102 @@ export async function dispatch(
     fragments: [],
     optIn: false,
   };
+  if (p.saveVersion !== 2) {
+    const prior = (await store.listPlayerSaves?.(uid)) || (doc ? [doc] : []);
+    const candidates = prior.filter((d) => {
+      const v = d.value as Player;
+      const suffix = d.key.slice(key.length + 1);
+      return (
+        d.owner === uid &&
+        (d.key === key ||
+          (d.key.startsWith(key + ":") &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+              suffix,
+            ))) &&
+        v.id === uid &&
+        typeof v.startedAt === "number" &&
+        v.progress &&
+        typeof v.progress === "object"
+      );
+    });
+    const completed = (d: Document) =>
+      Object.values((d.value as Player).progress).filter((x) => x.completedAt)
+        .length;
+    const activity = (d: Document) =>
+      Math.max(
+        (d.value as Player).startedAt,
+        ...Object.values((d.value as Player).progress).map(
+          (x) => x.completedAt || 0,
+        ),
+      );
+    candidates.sort(
+      (a, b) =>
+        completed(b) - completed(a) ||
+        activity(b) - activity(a) ||
+        Number(!!(b.value as Player).onboarded) -
+          Number(!!(a.value as Player).onboarded) ||
+        a.key.localeCompare(b.key),
+    );
+    if (candidates[0]) {
+      p = structuredClone(candidates[0].value as Player);
+      p.rankingKey = `ranking:${uid}`;
+    }
+    // Preserve the furthest trusted save as a whole: do not combine bonuses,
+    // attempts, hint counts or completion times from different investigations.
+    const reached = p.startedAt
+      ? Math.min(
+          6,
+          Object.values(p.progress).filter((x) => x.completedAt).length + 1,
+        )
+      : 0;
+    p.cinematicsSeen = [
+      ...new Set([
+        ...(p.cinematicsSeen || []),
+        ...Array.from({ length: reached }, (_, i) => i + 1),
+      ]),
+    ];
+    p.saveVersion = 2;
+    try {
+      p.nickname = validateNickname(p.nickname);
+    } catch {
+      p.nickname = "Witness";
+      p.onboarded = false;
+      p.optIn = false;
+    }
+    store.put(key, p, uid);
+    store.put(
+      `ranking:${uid}`,
+      p.ending && p.completedAt ? ranking(p) : { suppressed: true },
+      uid,
+      !!p.ending && !!p.completedAt && p.optIn,
+    );
+  }
+  try {
+    const name = validateNickname(p.nickname);
+    if (name !== p.nickname) {
+      p.nickname = name;
+      store.put(key, p, uid);
+      if (p.ending) store.put(`ranking:${uid}`, ranking(p), uid, p.optIn);
+    }
+  } catch {
+    p.nickname = "Witness";
+    p.onboarded = false;
+    p.optIn = false;
+    store.put(key, p, uid);
+    store.put(`ranking:${uid}`, { suppressed: true }, uid, false);
+  }
+  if (p.startedAt && !p.onboarded && !["state", "profile"].includes(r.op))
+    throw new GameError("Choose your detective name first.", 403);
   const save = () => store.put(key, p, uid);
   const current = () => ({ state: stateOf(p) });
+  const rankingKey = `ranking:${uid}`;
+  p.rankingKey = rankingKey;
   if (r.op === "leaderboard")
     return {
       entries: (await store.listPublic())
         .sort((a, b) => b.score - a.score || a.seconds - b.seconds)
         .slice(0, 50),
     };
-  // A caller controls its browser UUID. Bound new save allocation per account
-  // rather than allowing UUID rotation to create unlimited persistent rows.
-  if (browser && !doc) {
-    const indexKey = `player:${uid}:save-index`;
-    const indexDoc = await store.get(indexKey);
-    const index = (indexDoc?.value as { browsers: string[] } | undefined) || { browsers: [] };
-    if (!index.browsers.includes(browser)) {
-      if (index.browsers.length >= 10)
-        throw new GameError('This account has reached its ten-browser save limit.', 429);
-      index.browsers.push(browser);
-      store.put(indexKey, index, uid);
-    }
-  }
   if (r.op === "state") {
     if (!doc) save();
     return current();
@@ -265,28 +395,18 @@ export async function dispatch(
     return current();
   }
   if (r.op === "profile") {
-    p.nickname = text(r.nickname, 32);
-    if (
-      p.nickname.length < 2 ||
-      Array.from(p.nickname).some(
-        (c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127,
-      )
-    )
-      throw new GameError(
-        "Choose a detective name of 2–32 visible characters.",
-      );
+    p.nickname = validateNickname(r.nickname);
     p.onboarded = true;
     if (typeof r.optIn !== "boolean")
       throw new GameError("Choose ranking visibility.");
     p.optIn = r.optIn;
     save();
-    if (p.ending && p.completedAt)
-      store.put(
-        `ranking:${uid}${browser ? `:${browser}` : ""}`,
-        ranking(p),
-        uid,
-        p.optIn,
-      );
+    store.put(
+      rankingKey,
+      p.ending && p.completedAt ? ranking(p) : { suppressed: true },
+      uid,
+      !!p.ending && !!p.completedAt && p.optIn,
+    );
     return { ...current(), message: "Preferences saved." };
   }
   if (r.op.startsWith("room-")) {
@@ -295,6 +415,21 @@ export async function dispatch(
     return roomAction(store, uid, p, r, now);
   }
   if (!p.startedAt) throw new GameError("Begin the investigation first.", 403);
+  if (r.op === "cinematic-seen") {
+    const id = r.mission;
+    if (
+      !Number.isInteger(id) ||
+      !id ||
+      id < 1 ||
+      id > 6 ||
+      (id > 1 && !p.progress[id - 1]?.completedAt)
+    )
+      throw new GameError("Chapter introduction is locked.", 403);
+    p.cinematicsSeen = [...new Set([...(p.cinematicsSeen || []), id])];
+    save();
+    return current();
+  }
+  if (r.op === "echo") return { output: echoReply(p, text(r.text, 280)) };
   if (r.op === "archive") {
     if (!p.progress["2"]?.completedAt)
       throw new GameError("Archive partition locked.", 403);
@@ -323,12 +458,7 @@ export async function dispatch(
     p.ending = r.ending;
     if (!p.completedAt) p.completedAt = now;
     save();
-    store.put(
-      `ranking:${uid}${browser ? `:${browser}` : ""}`,
-      ranking(p),
-      uid,
-      p.optIn,
-    );
+    store.put(rankingKey, ranking(p), uid, p.optIn);
     return { ...current(), success: true };
   }
   const id = r.mission;
@@ -481,7 +611,8 @@ async function roomAction(
     member = active.members.find((x) => x.id === uid);
     if (!member) throw new GameError("Room membership required.", 403);
   }
-  member.seen = now;
+  const shouldWrite = r.op !== "room-get" || now - member.seen >= 15000;
+  if (shouldWrite) member.seen = now;
   switch (r.op) {
     case "room-ready":
       if (active.status === "waiting") member.ready = !member.ready;
@@ -517,7 +648,29 @@ async function roomAction(
         );
       active.status = "solved";
       break;
+    case "room-kick":
+      if (uid !== active.host || active.status !== "waiting")
+        throw new GameError("Only the host can remove a waiting partner.", 403);
+      active.members = active.members.filter((x) => x.role === "A");
+      member.ready = false;
+      break;
     case "room-leave":
+      if (
+        uid === active.host &&
+        active.status === "waiting" &&
+        active.messages.length === 0
+      ) {
+        const saved = await store.get(budgetKey);
+        const quotas = saved?.value as
+          | { roomCodes: string[]; roomCreationTimes: number[] }
+          | undefined;
+        if (quotas) {
+          const index = quotas.roomCreationTimes.indexOf(active.createdAt);
+          if (index >= 0) quotas.roomCreationTimes.splice(index, 1);
+          quotas.roomCodes = quotas.roomCodes.filter((c) => c !== code);
+          store.put(budgetKey, quotas, uid);
+        }
+      }
       if (uid === active.host || active.status !== "waiting")
         active.status = "closed";
       else active.members = active.members.filter((x) => x.id !== uid);
@@ -530,7 +683,7 @@ async function roomAction(
       throw new GameError("Unknown room action.");
   }
   if (active.status === "closed") store.remove(key);
-  else store.put(key, active, active.host);
+  else if (shouldWrite) store.put(key, active, active.host);
   const clue =
     active.status === "waiting"
       ? "The split file opens when both witnesses are ready."

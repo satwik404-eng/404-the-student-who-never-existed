@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   ArrowDown,
   ArrowRight,
@@ -20,19 +26,30 @@ import {
   Star,
   TerminalSquare,
   Users,
+  ScanFace,
+  RotateCcw,
   Zap,
 } from "lucide-react";
 import gsap from "gsap";
 import { ArchiveArtwork } from "./Artwork";
-import { useGame, usePrefs, sound } from "./store";
+import { useGame, usePrefs } from "./store";
 import { backendName, request } from "./api";
 import { supabase } from "./client";
-import { bootLines, missions } from "../shared/content";
+import { missions } from "../shared/content";
 import type { Ranking } from "../shared/types";
-import { External, Loading, PageTitle, Tag } from "./ui";
+import { ElapsedClock, External, Loading, Modal, PageTitle, Tag } from "./ui";
+
+import { chapterVisible } from "./presentation";
+const PurgeCinematic = lazy(() =>
+  import("./Cinematics").then((m) => ({ default: m.PurgeCinematic })),
+);
+const TransmissionTeaser = lazy(() =>
+  import("./Cinematics").then((m) => ({ default: m.TransmissionTeaser })),
+);
 
 export function Landing({ onGuide }: { onGuide: () => void }) {
   const state = useGame((x) => x.state);
+  const [preview, setPreview] = useState(false);
   const reduced = usePrefs((x) => x.reduced);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -74,9 +91,9 @@ export function Landing({ onGuide }: { onGuide: () => void }) {
               BEGIN INVESTIGATION
               <ArrowUpRight size={19} />
             </Link>
-            <Link
+            <button
               className="play-button"
-              to="/boot"
+              onClick={() => setPreview(true)}
               aria-label="Watch the opening transmission"
             >
               <span>
@@ -87,7 +104,7 @@ export function Landing({ onGuide }: { onGuide: () => void }) {
                 <br />
                 TRANSMISSION
               </span>
-            </Link>
+            </button>
           </div>
           {!!state?.startedAt && (
             <Link className="continue-link" to="/investigation">
@@ -120,7 +137,9 @@ export function Landing({ onGuide }: { onGuide: () => void }) {
           <div className="art-caption">
             <span className="crosshair">+</span> RECOVERING IDENTITY
             <br />
-            <span className="dim">RECORD INTEGRITY: 0.04%</span>
+            <span className="dim">
+              RECORD INTEGRITY: 0.04% / OPERATOR: 0xNULL
+            </span>
           </div>
           <ArchiveArtwork />
           <div className="art-bottom-note">
@@ -170,8 +189,10 @@ export function Landing({ onGuide }: { onGuide: () => void }) {
             >
               <span className="chapter-no">0{m.id}</span>
               <span>
-                <b>{m.title}</b>
-                <small>{m.type}</small>
+                <b>{chapterVisible(state, m.id) ? m.title : "CLASSIFIED"}</b>
+                <small>
+                  {chapterVisible(state, m.id) ? m.type : "CLEARANCE REQUIRED"}
+                </small>
               </span>
               <ArrowUpRight size={18} />
             </Link>
@@ -218,6 +239,21 @@ export function Landing({ onGuide }: { onGuide: () => void }) {
           <Headphones size={13} /> Best experienced with headphones
         </Link>
       </footer>
+      {preview && (
+        <Modal
+          title="INTERCEPTED TRANSMISSION / PREVIEW"
+          closeLabel="Close cinematic preview"
+          onClose={() => setPreview(false)}
+        >
+          <Suspense fallback={<Loading />}>
+            {state?.onboarded ? (
+              <PurgeCinematic preview onIntercept={() => setPreview(false)} />
+            ) : (
+              <TransmissionTeaser onClose={() => setPreview(false)} />
+            )}
+          </Suspense>
+        </Modal>
+      )}
       <a className="scroll-indicator" href="#main" aria-label="Back to the top">
         <ArrowDown size={14} />
       </a>
@@ -227,84 +263,39 @@ export function Landing({ onGuide }: { onGuide: () => void }) {
 
 export function Boot() {
   const act = useGame((x) => x.act);
+  const state = useGame((x) => x.state);
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
+  const [params] = useSearchParams();
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const reduced = usePrefs((x) => x.reduced);
-  const busy = useRef(false);
-  useEffect(() => {
-    if (step < bootLines.length) {
-      const timer = setTimeout(() => setStep((x) => x + 1), reduced ? 70 : 650);
-      return () => clearTimeout(timer);
-    }
-  }, [step, reduced]);
+  const replay = params.get("replay") === "1";
+  const lock = useRef(false);
+  if (state?.startedAt && !replay)
+    return <Navigate to="/investigation" replace />;
   async function enter() {
-    if (busy.current) return;
-    busy.current = true;
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
     try {
-      await act({ op: "start" });
-      sound("success");
+      if (!replay) await act({ op: "start" });
       navigate("/investigation");
     } catch (e) {
       setError((e as Error).message);
-      busy.current = false;
+      lock.current = false;
+      setBusy(false);
     }
   }
   return (
-    <section className="boot-page">
-      <div className="boot-header">
-        <Fingerprint size={28} />
-        <span>MERIDIAN / RECOVERY CONSOLE</span>
-        <button className="text-button" onClick={() => void enter()}>
-          SKIP INTRO
-          <ArrowRight size={14} />
-        </button>
-      </div>
-      <div className="boot-console">
-        <p className="eyebrow">
-          ESTABLISHING A CONNECTION TO SOMETHING THAT ISN’T THERE.
-        </p>
-        {bootLines.slice(0, step + 1).map((line, i) => (
-          <p
-            className={i === 3 || i === 4 ? "warning mono" : "mono"}
-            key={line}
-          >
-            <span className="dim">
-              [{`00:${(i * 7).toString().padStart(2, "0")}`}]
-            </span>{" "}
-            {line}
-            <span className="boot-check">
-              {i < 3 ? "OK" : i < 5 ? "ERR" : "…"}
-            </span>
-          </p>
-        ))}
-        {step >= bootLines.length && (
-          <div className="boot-message">
-            <Tag tone="critical">IDENTITY DELETED</Tag>
-            <h1>
-              “If you’re reading this,
-              <br />
-              they’ve already erased me.”
-            </h1>
-            <p>
-              STUDENT ID: 2026-UNKNOWN
-              <br />
-              LAST ACTIVITY: TOMORROW, 03:42 AM
-            </p>
-            <p className="lime">Check the source.</p>
-            <button className="button" onClick={() => void enter()}>
-              ENTER THE ARCHIVE
-              <ArrowUpRight size={17} />
-            </button>
-          </div>
-        )}
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-      </div>
-    </section>
+    <div className="boot-page prologue-page">
+      <Suspense fallback={<Loading />}>
+        <PurgeCinematic
+          onIntercept={() => void enter()}
+          busy={busy}
+          error={error}
+          commentary={replay ? state?.narrative?.perspective : undefined}
+        />
+      </Suspense>
+    </div>
   );
 }
 
@@ -320,6 +311,7 @@ export function Dashboard() {
         <span className="eyebrow">
           <span className="status-dot" /> {backendName}
         </span>
+        <ElapsedClock state={s} />
         <span className="mono dim">
           WITNESS / {s.id.slice(0, 8).toUpperCase()}
         </span>
@@ -381,11 +373,8 @@ export function Dashboard() {
           </div>
           <p>
             “
-            {s.chapter === 1
-              ? "I remember a name the archive does not. Will you look for it?"
-              : s.chapter < 6
-                ? "You found another piece. The silence is starting to sound like a confession."
-                : "It knows you are here. Keep the evidence close."}
+            {s.narrative?.echo ||
+              "There is a name behind the absence. Keep looking."}
             ”
           </p>
           <span className="text-link">
@@ -400,6 +389,13 @@ export function Dashboard() {
               icon: FolderOpen,
               title: "Evidence journal",
               desc: `${completed + 1} recovered artifacts`,
+              locked: false,
+            },
+            {
+              to: "suspects",
+              icon: ScanFace,
+              title: "Suspect board",
+              desc: "Accusations are not evidence",
               locked: false,
             },
             {
@@ -466,7 +462,17 @@ export function Dashboard() {
                   <ArrowUpRight size={14} />
                 </Link>
               ) : (
-                <span>{m.title}</span>
+                <span>CLASSIFIED</span>
+              )}
+              {m.id <= s.chapter && (
+                <Link
+                  className="row-intro-replay"
+                  to={`/investigation/mission/${m.id}?intro=replay`}
+                  aria-label={`Replay intro for ${m.title}`}
+                >
+                  <RotateCcw size={12} />
+                  INTRO
+                </Link>
               )}
               <small>
                 {s.progress[m.id]?.completedAt
@@ -478,6 +484,13 @@ export function Dashboard() {
             </div>
           ))}
         </section>
+      </div>
+      <div className="cinematic-replay-link">
+        <Link className="text-button" to="/boot?replay=1">
+          <RotateCcw size={16} />
+          REPLAY THE PURGE
+        </Link>
+        <span className="mono dim">A reconstruction. Not a verdict.</span>
       </div>
     </div>
   );
@@ -604,11 +617,18 @@ export function Settings() {
         <button
           className="button secondary"
           onClick={() => {
-            void supabase!.auth.signOut({ scope: "local" }).then(({error}) => {
-              if(error){setStatus('Sign-out could not be completed. Please try again.');return;}
-              useGame.getState().reset();
-              navigate("/login");
-            });
+            void supabase!.auth
+              .signOut({ scope: "local" })
+              .then(({ error }) => {
+                if (error) {
+                  setStatus(
+                    "Sign-out could not be completed. Please try again.",
+                  );
+                  return;
+                }
+                useGame.getState().reset();
+                navigate("/login");
+              });
           }}
         >
           SIGN OUT OF THIS BROWSER
@@ -822,6 +842,22 @@ export function EndingPage() {
           : "You gave the truth somewhere to live. They will remember us."}
         ”
       </p>
+      {s.narrative?.epilogue && (
+        <section className="ending-epilogue">
+          <div className="restored-record">
+            <p className="eyebrow">
+              {restored
+                ? "ORIGINAL RECORD / REINSTATED"
+                : "FRAUDULENT AUDIT / EXPOSED"}
+            </p>
+            {s.narrative.epilogue.record.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+          <blockquote>{s.narrative.epilogue.message}</blockquote>
+          <p className="haunted">ECHO: “{s.narrative.epilogue.echo}”</p>
+        </section>
+      )}
       <div className="result-stats">
         <div>
           <span>SCORE</span>
@@ -879,6 +915,10 @@ export function EndingPage() {
         </div>
       </section>
       <div className="ending-actions">
+        <Link className="text-button" to="/boot?replay=1">
+          <RotateCcw size={16} />
+          REWATCH THE PURGE / RECOVERED PERSPECTIVE
+        </Link>
         <Link className="text-button" to="/leaderboard">
           VIEW THE WITNESSES
           <ArrowUpRight size={16} />

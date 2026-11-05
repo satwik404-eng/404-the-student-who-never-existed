@@ -1,5 +1,18 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   ArrowDown,
   ArrowLeft,
@@ -20,12 +33,24 @@ import {
   Send,
   ShieldAlert,
 } from "lucide-react";
-import { evidenceDetails, missions, timelineCards } from "../shared/content";
-import type { ArchiveRecord } from "../shared/types";
+import { missions } from "../shared/content";
+import type { ArchiveRecord, TimelineCard } from "../shared/types";
 import { request } from "./api";
 import { sound, useGame } from "./store";
-import { Loading, PageTitle, Tag } from "./ui";
+import { ElapsedClock, Loading, PageTitle, Tag } from "./ui";
 import { formatTime } from "./Pages";
+
+import {
+  presentationScope,
+  timelineInitialOrder,
+  usePresentation,
+} from "./presentation";
+const ChapterIntro = lazy(() =>
+  import("./Cinematics").then((m) => ({ default: m.ChapterIntro })),
+);
+const StoryTransition = lazy(() =>
+  import("./Cinematics").then((m) => ({ default: m.StoryTransition })),
+);
 
 export function MissionPage() {
   const { id } = useParams();
@@ -37,7 +62,7 @@ function MissionContent({ number }: { number: number }) {
   const navigate = useNavigate();
   const mission = missions[number - 1];
   const [answer, setAnswer] = useState("");
-  const [order, setOrder] = useState(timelineCards.map((x) => x.id));
+  const [order, setOrder] = useState<string[]>(timelineInitialOrder);
   const [message, setMessage] = useState("");
   const [hint, setHint] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,10 +70,42 @@ function MissionContent({ number }: { number: number }) {
   const progress = s.progress[number];
   const done = !!progress?.completedAt;
   const fifthComplete = !!s.progress["5"]?.completedAt;
+  const presentation = usePresentation();
+  const [params, setParams] = useSearchParams();
+  const [story, setStory] = useState(false);
+  const scope = presentationScope(s);
+  const [introOpen, setIntroOpen] = useState(
+    () =>
+      !done &&
+      !(s.cinematicsSeen || []).includes(number) &&
+      !(presentation.seen[scope] || []).includes(number),
+  );
+  const replayIntro = params.get("intro") === "replay";
+  const markIntroSeen = presentation.markSeen;
+  const showIntro =
+    !!mission && number <= s.chapter && (introOpen || replayIntro);
   useEffect(() => {
-    if (number !== 6 || !fifthComplete || done) return;
+    if (!showIntro || replayIntro) return;
+    // Record first display on the account, but retain this mounted intro until
+    // Continue/Skip. A refresh or another browser must not replay it implicitly.
+    markIntroSeen(scope, number);
+    void act({ op: "cinematic-seen", mission: number }).catch((e) =>
+      setMessage(e.message),
+    );
+  }, [showIntro, replayIntro, act, scope, number, markIntroSeen]);
+  function enterChapter() {
+    setIntroOpen(false);
+    presentation.markSeen(scope, number);
+    if (params.has("intro")) {
+      const next = new URLSearchParams(params);
+      next.delete("intro");
+      setParams(next, { replace: true });
+    }
+  }
+  useEffect(() => {
+    if (number !== 6 || !fifthComplete || done || showIntro) return;
     act({ op: "final-start" }).catch((e) => setMessage(e.message));
-  }, [number, act, done, fifthComplete]);
+  }, [number, act, done, fifthComplete, showIntro]);
   useEffect(() => {
     if (number !== 6) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -80,6 +137,7 @@ function MissionContent({ number }: { number: number }) {
         answer: number === 5 ? order : answer,
       });
       setMessage(result.message || "");
+      if (result.success && !done) setStory(true);
       sound(result.success ? "success" : "error");
     } catch (e) {
       setMessage((e as Error).message);
@@ -111,6 +169,12 @@ function MissionContent({ number }: { number: number }) {
       setBusy(false);
     }
   }
+  if (showIntro)
+    return (
+      <Suspense fallback={<Loading />}>
+        <ChapterIntro chapter={number} onContinue={enterChapter} />
+      </Suspense>
+    );
   return (
     <div className="workspace mission-page">
       <div className="workspace-top">
@@ -121,6 +185,7 @@ function MissionContent({ number }: { number: number }) {
         <span className="eyebrow">
           CHAPTER {String(number).padStart(2, "0")} / 06
         </span>
+        <ElapsedClock state={s} />
         <span className="mono lime">{s.score} XP</span>
       </div>
       <div className="mission-layout">
@@ -145,7 +210,7 @@ function MissionContent({ number }: { number: number }) {
               ) : (
                 <span className="locked-step">
                   <span>0{m.id}</span>
-                  {m.title}
+                  CLASSIFIED
                   <LockKeyhole size={12} />
                 </span>
               )}
@@ -168,6 +233,14 @@ function MissionContent({ number }: { number: number }) {
             title={mission.title}
             description={mission.subtitle}
           />
+          <div className="chapter-replay">
+            <Link className="text-button" to={`?intro=replay`}>
+              REPLAY CHAPTER INTRO <ArrowUpRight size={13} />
+            </Link>
+            <Link className="text-button" to="/investigation/suspects">
+              OPEN SUSPECT BOARD <ArrowUpRight size={13} />
+            </Link>
+          </div>
           <div className="mission-brief">
             <span className="eyebrow">THE OBJECTIVE</span>
             <p>{mission.brief}</p>
@@ -198,6 +271,17 @@ function MissionContent({ number }: { number: number }) {
               )}
             </div>
           )}
+          {number === 6 && (
+            <div className="final-system-voice">
+              <span className="eyebrow">ARCHIVIST / INTEGRITY ENFORCEMENT</span>
+              <p>“You are an inconsistency. I will correct you.”</p>
+              <span className="eyebrow lime">ECHO / INDEPENDENT CHANNEL</span>
+              <p>
+                {s.narrative?.echo ||
+                  "A name is not an error the system can correct."}
+              </p>
+            </div>
+          )}
           <section className="mission-workspace panel">
             <div className="panel-top">
               <span className="eyebrow">
@@ -210,11 +294,15 @@ function MissionContent({ number }: { number: number }) {
             {number === 3 && <Archive embedded />}
             {number === 4 && <Terminal />}
             {number === 5 && (
-              <Timeline order={order} setOrder={setOrder} />
+              <Timeline
+                order={order}
+                setOrder={setOrder}
+                cards={s.narrative?.timeline || []}
+              />
             )}{" "}
             {number === 6 && (
               <div className="final-evidence">
-                <FingerprintCard />
+                <FingerprintCard redacted />
                 <div>
                   <Tag tone="critical">ARCHIVIST / MESSAGE</Tag>
                   <h2>
@@ -251,6 +339,9 @@ function MissionContent({ number }: { number: number }) {
                 </h2>
                 <p>{missions[number - 1].evidence} added to your journal.</p>
               </div>
+              <button className="text-button" onClick={() => setStory(true)}>
+                REPLAY RECOVERY EVENT
+              </button>
               {number < 6 && (
                 <Link
                   className="button"
@@ -355,6 +446,19 @@ function MissionContent({ number }: { number: number }) {
           )}
         </div>
       </div>
+      {story && s.narrative?.events[String(number)] && (
+        <Suspense fallback={<Loading />}>
+          <StoryTransition
+            chapter={number}
+            event={s.narrative.events[String(number)]}
+            onClose={() => setStory(false)}
+            onNext={() => {
+              setStory(false);
+              if (number < 6) navigate(`/investigation/mission/${number + 1}`);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -415,6 +519,7 @@ export function decodeBase64(value: string) {
   }
 }
 function Decoder() {
+  const signal = useGame((x) => x.state?.narrative?.signal) || "";
   const [input, setInput] = useState("");
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
@@ -433,7 +538,7 @@ function Decoder() {
     <div className="decoder">
       <div className="signal-block">
         <span className="eyebrow">INTERCEPTED TRANSMISSION / BASE64</span>
-        <p className="signal-text">UkVHT0xJVEg=</p>
+        <p className="signal-text">{signal || "SIGNAL UNAVAILABLE"}</p>
         <span className="mono dim">SOURCE: ECHO / PARTITION UNKNOWN</span>
       </div>
       <form onSubmit={decode}>
@@ -447,6 +552,14 @@ function Decoder() {
             placeholder="Paste the encoded transmission"
           />
         </label>
+        <button
+          type="button"
+          className="text-button"
+          disabled={!signal}
+          onClick={() => setInput(signal)}
+        >
+          LOAD INTERCEPTED SIGNAL
+        </button>
         <button type="submit" className="button secondary">
           DECODE SIGNAL
           <ArrowDown size={16} />
@@ -589,9 +702,10 @@ export function Terminal({ standalone = false }: { standalone?: boolean }) {
   const s = useGame((x) => x.state)!;
   const act = useGame((x) => x.act);
   const allowed = !!s.progress["3"]?.completedAt;
+  const terminalKey = `404-terminal-v3:${presentationScope(s)}`;
   const [lines, setLines] = useState<string[]>(() => {
     try {
-      return JSON.parse(sessionStorage.getItem("404-terminal-output") || "[]");
+      return JSON.parse(sessionStorage.getItem(terminalKey) || "[]");
     } catch {
       return [];
     }
@@ -603,12 +717,9 @@ export function Terminal({ standalone = false }: { standalone?: boolean }) {
   const [busy, setBusy] = useState(false);
   const output = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    sessionStorage.setItem(
-      "404-terminal-output",
-      JSON.stringify(lines.slice(-120)),
-    );
+    sessionStorage.setItem(terminalKey, JSON.stringify(lines.slice(-120)));
     output.current?.scrollTo(0, output.current.scrollHeight);
-  }, [lines]);
+  }, [lines, terminalKey]);
   async function run(e: FormEvent) {
     e.preventDefault();
     const command = input.trim();
@@ -696,7 +807,41 @@ export function Terminal({ standalone = false }: { standalone?: boolean }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "ArrowUp") {
+            if (e.key === "Tab" && input.trim()) {
+              const parts = input.split(/\s+/);
+              const prefix = parts.at(-1)!;
+              const choices =
+                parts.length === 1
+                  ? [
+                      "help",
+                      "ls",
+                      "pwd",
+                      "cd",
+                      "cat",
+                      "grep",
+                      "history",
+                      "clear",
+                      "whoami",
+                    ]
+                  : [
+                      "/archive",
+                      "/logs",
+                      "/students",
+                      "/system",
+                      "/classified",
+                      "/archive/backup.log",
+                      "/logs/access.log",
+                      "/classified/witness.log",
+                      "/students/aarya.txt",
+                      "/system/readme.txt",
+                    ];
+              const matches = choices.filter((x) => x.startsWith(prefix));
+              if (matches.length) {
+                e.preventDefault();
+                parts[parts.length - 1] = matches[0];
+                setInput(parts.join(" "));
+              }
+            } else if (e.key === "ArrowUp") {
               e.preventDefault();
               const i =
                 cursor < 0 ? history.length - 1 : Math.max(0, cursor - 1);
@@ -743,10 +888,13 @@ export function Terminal({ standalone = false }: { standalone?: boolean }) {
 function Timeline({
   order,
   setOrder,
+  cards,
 }: {
   order: string[];
   setOrder: (ids: string[]) => void;
+  cards: TimelineCard[];
 }) {
+  const [announcement, setAnnouncement] = useState("");
   const [dragged, setDragged] = useState<string | null>(null);
   function move(from: number, to: number) {
     if (to < 0 || to >= order.length) return;
@@ -754,8 +902,16 @@ function Timeline({
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item);
     setOrder(next);
+    setAnnouncement(`Event moved to position ${to + 1}.`);
     sound();
   }
+  if (!cards.length)
+    return (
+      <p>
+        The recovered timeline is awaiting the matching story server. Your
+        verified progress is intact.
+      </p>
+    );
   return (
     <div className="timeline-workspace">
       <div className="timeline-date">
@@ -766,9 +922,12 @@ function Timeline({
         Rebuild the sequence. Drag cards or use the arrow buttons to order the
         night from earliest to latest.
       </p>
+      <p role="status" className="mono lime">
+        {announcement}
+      </p>
       <ol className="timeline-cards">
         {order.map((id, index) => {
-          const card = timelineCards.find((c) => c.id === id)!;
+          const card = cards.find((c) => c.id === id)!;
           return (
             <li
               key={id}
@@ -815,7 +974,8 @@ function Timeline({
     </div>
   );
 }
-function FingerprintCard() {
+function FingerprintCard({ redacted = false }: { redacted?: boolean }) {
+  const identity = useGame((x) => x.state?.narrative?.identity);
   return (
     <div className="student-card">
       <span className="eyebrow">MERIDIAN UNIVERSITY</span>
@@ -824,7 +984,11 @@ function FingerprintCard() {
         <i />
       </div>
       <span className="student-card-name">AARYA SEN</span>
-      <strong>AS-042</strong>
+      <strong>
+        {redacted
+          ? "[ID REDACTED — CHECK EVIDENCE JOURNAL]"
+          : identity?.id || "AWAITING RECORD"}
+      </strong>
       <span className="eyebrow">ORIGINAL STUDENT ID</span>
       <Tag tone="critical">RECOVERED / DELETED</Tag>
     </div>
@@ -838,8 +1002,29 @@ export function Evidence() {
       .filter((m) => s.progress[m.id]?.completedAt)
       .map((m) => String(m.id)),
   ];
-  const [selected, setSelected] = useState("identity");
-  const selectedEvidence = evidenceDetails[selected];
+  const [params] = useSearchParams();
+  const [selected, setSelected] = useState(() =>
+    keys.includes(params.get("artifact") || "")
+      ? params.get("artifact")!
+      : "identity",
+  );
+  const evidenceDetails =
+    s.narrative?.evidence ||
+    Object.fromEntries(
+      keys.map((k) => [
+        k,
+        {
+          title:
+            k === "identity"
+              ? "Deleted identity"
+              : missions[Number(k) - 1].evidence,
+          label: "RECOVERED ARTIFACT",
+          text: "This artifact is preserved. Expanded case details require the matching story server.",
+        },
+      ]),
+    );
+  const selectedEvidence =
+    evidenceDetails[selected] || evidenceDetails.identity;
   return (
     <div className="workspace">
       <Link className="back-link" to="/investigation">
@@ -901,43 +1086,34 @@ export function Echo() {
   const [messages, setMessages] = useState<{ from: string; text: string }[]>([
     {
       from: "ECHO",
-      text: "The archive has a perfect memory. That is what it wants you to believe. I can help you look closer.",
+      text:
+        s.narrative?.echo ||
+        "The archive has a perfect memory. That is what it wants you to believe. I can help you look closer.",
     },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  function ask(text: string) {
-    const q = text.toLowerCase();
-    let reply = mission.guide;
-    if (/who|aarya|student/.test(q))
-      reply =
-        s.chapter >= 5
-          ? "Aarya studied automated recordkeeping. ECHO is the recovery routine they left behind. I am what remained of their plan."
-          : "Aarya Sen. A researcher at Meridian University. Every public record says they were never here. I remember differently.";
-    else if (/echo|you/.test(q))
-      reply =
-        s.chapter >= 5
-          ? "I am a recovery routine. Aarya wrote me before the purge. I needed a human witness. I found you."
-          : "Call me ECHO. I can read the cracks between records. I need someone on the other side of the screen.";
-    else if (/encoding|encrypt|base64/.test(q))
-      reply =
-        "Encoding changes representation. Encryption protects content with a key. Base64 is reversible encoding; it does not keep secrets.";
-    else if (/score|point/.test(q))
-      reply =
-        "A verified chapter earns 100 XP, with 25 extra for a first-attempt match. Optional hints cost 10, then 20, then 30 XP. The field guide is free.";
-    else if (/solution|answer|hint/.test(q))
-      reply =
-        "I cannot give you a solution. Your next move is in the field guide. If you need a stronger clue, request an optional hint below.";
-    else if (/next|mission|stuck|help/.test(q)) reply = mission.guide;
-    else
-      reply = `I can help with your next move, Aarya, encoding, or the scoring rules. For now, stay with chapter ${s.chapter}: ${mission.title}. ${mission.guide}`;
-    setMessages((m) => [
-      ...m,
-      { from: "YOU", text },
-      { from: "ECHO", text: reply },
-    ]);
-    sound();
+  async function ask(text: string) {
+    if (busy) return;
+    setBusy(true);
+    setMessages((m) => [...m, { from: "YOU", text }].slice(-60));
+    try {
+      const result = await act({ op: "echo", text });
+      setMessages((m) =>
+        [...m, { from: "ECHO", text: result.output || mission.guide }].slice(
+          -60,
+        ),
+      );
+      sound();
+    } catch (e) {
+      setMessages((m) =>
+        [...m, { from: "SYSTEM", text: (e as Error).message }].slice(-60),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
+
   async function hint() {
     setBusy(true);
     try {
@@ -955,9 +1131,9 @@ export function Echo() {
   return (
     <div className="workspace narrow">
       <PageTitle
-        eyebrow="ENCRYPTED CHANNEL / DETERMINISTIC ASSISTANT"
+        eyebrow="RECOVERY CHANNEL / IDENTITY UNVERIFIED"
         title="Someone is listening"
-        description="ECHO remembers what the archive forgot. No external AI service is used."
+        description="A voice in the archive. Helpful does not mean innocent."
       />
       <div className="echo-chat panel">
         <div className="panel-top">
@@ -981,10 +1157,11 @@ export function Echo() {
           {[
             "What do I do next?",
             "Who is Aarya?",
+            "Can I trust 0xNULL?",
             "Encoding vs encryption",
             "How does scoring work?",
           ].map((t) => (
-            <button key={t} onClick={() => ask(t)}>
+            <button disabled={busy} key={t} onClick={() => void ask(t)}>
               {t}
             </button>
           ))}
@@ -994,7 +1171,7 @@ export function Echo() {
           onSubmit={(e) => {
             e.preventDefault();
             if (input.trim()) {
-              ask(input.trim());
+              void ask(input.trim());
               setInput("");
             }
           }}
@@ -1009,6 +1186,7 @@ export function Echo() {
           <button
             className="icon-button"
             aria-label="Send to ECHO"
+            disabled={busy}
             type="submit"
           >
             <Send size={18} />

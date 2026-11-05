@@ -23,17 +23,15 @@ export function initializeIdentity() {
       error: "",
     });
   });
-  void supabase.auth
-    .getSession()
-    .then(({ data, error }) =>
-      useIdentity.setState({
-        ready: true,
-        user: supportedIdentity(data.session?.user || null)
-          ? data.session!.user
-          : null,
-        error: error ? "Your sign-in session could not be read." : "",
-      }),
-    );
+  void supabase.auth.getSession().then(({ data, error }) =>
+    useIdentity.setState({
+      ready: true,
+      user: supportedIdentity(data.session?.user || null)
+        ? data.session!.user
+        : null,
+      error: error ? "Your sign-in session could not be read." : "",
+    }),
+  );
 }
 export function IdentityGate({
   children,
@@ -49,7 +47,12 @@ export function IdentityGate({
   if (game.loading) return <Loading />;
   // Auth events can switch users in another tab without reloading this page.
   // Never render a prior actor's state while the replacement is being loaded.
-  if (supabase && identity.user && game.state && game.state.id !== identity.user.id)
+  if (
+    supabase &&
+    identity.user &&
+    game.state &&
+    game.state.id !== identity.user.id
+  )
     return <Loading />;
   if (game.error)
     return (
@@ -126,8 +129,9 @@ export function Login() {
         <ShieldCheck size={30} />
         <h2>Enter the archive.</h2>
         <p>
-          Your investigation resumes in this browser. Your detective name is
-          shown to your co-op partner and, only if you opt in, in the rankings.
+          Your investigation follows your account across browsers. Your
+          detective name is shown to your co-op partner and, only if you opt in,
+          in the rankings.
         </p>
         <button
           className="button oauth-google"
@@ -137,15 +141,17 @@ export function Login() {
           <b>G</b>CONTINUE WITH GOOGLE
           <ArrowUpRight size={17} />
         </button>
-        {providers?.apple && <button
-          className="button secondary"
-          disabled={busy || !providers?.apple}
-          onClick={() => void signIn("apple")}
-        >
-          <Apple size={19} />
-          CONTINUE WITH APPLE
-          <ArrowUpRight size={17} />
-        </button>}
+        {providers?.apple && (
+          <button
+            className="button secondary"
+            disabled={busy || !providers?.apple}
+            onClick={() => void signIn("apple")}
+          >
+            <Apple size={19} />
+            CONTINUE WITH APPLE
+            <ArrowUpRight size={17} />
+          </button>
+        )}
         {supabase && providers && !providers.google && (
           <p className="signin-note">
             Unavailable sign-in methods are being prepared. Please check back
@@ -262,7 +268,7 @@ export function Onboarding() {
       <PageTitle
         eyebrow="FIRST CONTACT / WITNESS REGISTRATION"
         title="What should ECHO call you?"
-        description="Choose your detective name. Your progress saves automatically to this browser’s investigation slot."
+        description="Choose your detective name. Your progress saves automatically to your account, across browsers."
       />
       <form className="panel login-card" onSubmit={save}>
         <label className="field">

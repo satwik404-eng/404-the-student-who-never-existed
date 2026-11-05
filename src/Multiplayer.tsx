@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -32,11 +32,14 @@ function RoomPage({ roomCode }: { roomCode?: string }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const syncing = useRef(false);
   const [presence, setPresence] = useState<string[]>([]);
   useEffect(() => {
     if (!roomCode) return;
     let live = true;
     async function sync(join = false) {
+      if (syncing.current) return;
+      syncing.current = true;
       try {
         const r = await request({
           op: join ? "room-join" : "room-get",
@@ -52,6 +55,8 @@ function RoomPage({ roomCode }: { roomCode?: string }) {
           setError((e as Error).message);
           setConnected(false);
         }
+      } finally {
+        syncing.current = false;
       }
     }
     void sync(true);
@@ -79,9 +84,14 @@ function RoomPage({ roomCode }: { roomCode?: string }) {
           filter: `key=eq.room:${room.code}`,
         },
         () => {
+          if (syncing.current) return;
+          syncing.current = true;
           request({ op: "room-get", code: room.code })
             .then((r) => r.room && setRoom(r.room))
-            .catch((e) => setError(e.message));
+            .catch((e) => setError(e.message))
+            .finally(() => {
+              syncing.current = false;
+            });
         },
       )
       .subscribe(async (status) => {
@@ -324,6 +334,15 @@ function RoomPage({ roomCode }: { roomCode?: string }) {
                     : "I’M READY"}
                   <Check size={16} />
                 </button>
+                {room.role === "A" && room.members.length === 2 && (
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => void action("room-kick")}
+                  >
+                    REMOVE PARTNER
+                  </button>
+                )}
                 {room.role === "A" && (
                   <button
                     className="button"

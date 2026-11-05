@@ -1,5 +1,7 @@
 import {
   Component,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -54,6 +56,7 @@ import {
 } from "./Auth";
 import { supabase } from "./client";
 import { Loading, Modal } from "./ui";
+const Suspects = lazy(() => import("./Suspects"));
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { failed: boolean }
@@ -213,6 +216,14 @@ export function App() {
             <Route
               path="/investigation/mission/:id"
               element={protectedPage(<MissionPage />)}
+            />
+            <Route
+              path="/investigation/suspects"
+              element={protectedPage(
+                <Suspense fallback={<Loading />}>
+                  <Suspects />
+                </Suspense>,
+              )}
             />
             <Route
               path="/investigation/evidence"

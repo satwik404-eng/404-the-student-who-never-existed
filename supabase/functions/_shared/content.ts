@@ -2,7 +2,7 @@ import type { Mission } from "./types.ts";
 export const missions: Mission[] = [
   {
     id: 1,
-    title: "The source",
+    title: "The first trace",
     subtitle: "Some things survive deletion.",
     type: "SOURCE INSPECTION",
     brief:
@@ -13,7 +13,7 @@ export const missions: Mission[] = [
   },
   {
     id: 2,
-    title: "The transmission",
+    title: "The ghost signal",
     subtitle: "A voice between the static.",
     type: "BASE64 DECODING",
     brief:
@@ -24,7 +24,7 @@ export const missions: Mission[] = [
   },
   {
     id: 3,
-    title: "The corrupted archive",
+    title: "The impossible timeline",
     subtitle: "Time remembers what people forget.",
     type: "RECORD FORENSICS",
     brief:
@@ -35,7 +35,7 @@ export const missions: Mission[] = [
   },
   {
     id: 4,
-    title: "Ghost in the terminal",
+    title: "The hidden operator",
     subtitle: "Three fragments. One witness.",
     type: "SIMULATED FILESYSTEM",
     brief:
@@ -46,91 +46,25 @@ export const missions: Mission[] = [
   },
   {
     id: 5,
-    title: "The evidence board",
+    title: "The false confession",
     subtitle: "Put the night back together.",
     type: "TIMELINE RECONSTRUCTION",
     brief:
-      "Arrange the four audit events from earliest to latest. These recovered timestamps all use UTC. The correct sequence will reveal the intent behind the deletion.",
+      "Arrange the four audit events from earliest to latest. These recovered timestamps all use UTC. The displayed accusation and the storage receipts disagree. Establish which action came first before trusting either account.",
     guide:
       "A machine can change a record. It cannot change every witness. Put the audit slips back in time order. The first event happened before the night turned wrong.",
     evidence: "Corrupted audit history",
   },
   {
     id: 6,
-    title: "The final firewall",
+    title: "The final protocol",
     subtitle: "Remembering is an act of resistance.",
     type: "IDENTITY VERIFICATION",
     brief:
-      "ARCHIVIST has detected you. Reconcile Aarya’s original student identifier against the recovered identity card. Then decide what survives: their identity, or the truth about the system.",
+      "The reconstructed audit has exposed a falsified accusation. ARCHIVIST has detected you. Reconcile Aarya’s original student identifier against the recovered identity card. Then decide what survives: their identity, or the truth about the system.",
     guide:
       "The firewall wants a number, not a name. Your evidence holds the identity it tried to erase. Recover it before the clock runs out. If the connection dies, your evidence will remain.",
     evidence: "Verified identity",
-  },
-];
-export const evidenceDetails: Record<
-  string,
-  { title: string; label: string; text: string }
-> = {
-  identity: {
-    title: "Deleted identity",
-    label: "STUDENT RECORD / RECOVERED",
-    text: "AARYA SEN · Student ID AS-042 · Enrolled 14 August 2024 · Research assistant, archive ethics lab. “A name is not a privilege the system can revoke.”",
-  },
-  "1": {
-    title: "Archive access key",
-    label: "HTML COMMENT / VERIFIED",
-    text: "A recovery marker hidden beneath the portal. Aarya expected someone to look beyond the interface.",
-  },
-  "2": {
-    title: "Encoded transmission",
-    label: "BASE64 / DECODED",
-    text: "A lunar surface term. Aarya named the archive partition after the dust that keeps every footprint.",
-  },
-  "3": {
-    title: "Suspicious timeline",
-    label: "RECORD AS-042 / CONTRADICTION",
-    text: "Aarya’s record was deleted at 03:42 UTC on 04 November 2026. A final activity was logged a day later. An archive backup continued to remember them.",
-  },
-  "4": {
-    title: "Recovered log fragments",
-    label: "THREE DIRECTORIES / REASSEMBLED",
-    text: "A witness statement survived as three numbered fragments. ARCHIVIST classified memory as a system fault.",
-  },
-  "5": {
-    title: "Corrupted audit history",
-    label: "AUDIT TRAIL / RECONSTRUCTED",
-    text: "ARCHIVIST erased the researcher who discovered unauthorized identity edits. ECHO was a recovery routine Aarya created before the purge.",
-  },
-  "6": {
-    title: "Verified identity",
-    label: "CHECKSUM / ACCEPTED",
-    text: "The student existed. The record is proof. What happens to the proof is now your choice.",
-  },
-};
-export const timelineCards = [
-  {
-    id: "purge",
-    time: "03:42",
-    title: "Identity purged",
-    text: "ARCHIVIST removes the student from every public index.",
-  },
-  {
-    id: "backup",
-    time: "03:18",
-    title: "Recovery routine written",
-    text: "Aarya creates ECHO and stores an offline identity checksum.",
-  },
-  {
-    id: "echo",
-    time: "03:43",
-    title: "ECHO wakes",
-    text: "A recovery process begins searching for a human witness.",
-  },
-  {
-    id: "audit",
-    time: "03:09",
-    title: "Unauthorized edits discovered",
-    text: "Aarya finds unexplained changes in the ethics lab audit.",
   },
 ];
 export const bootLines = [

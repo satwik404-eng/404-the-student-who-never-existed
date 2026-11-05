@@ -24,6 +24,11 @@ class TestStore implements Store {
   remove(key: string) {
     this.docs.delete(key);
   }
+  async listPlayerSaves(uid: string) {
+    return [...this.docs.values()].filter(
+      (d) => d.owner === uid && d.key.startsWith("player:"),
+    );
+  }
   async listPublic() {
     return [...this.docs.values()]
       .filter((x) => x.public)
@@ -128,7 +133,7 @@ describe("trusted single-player progression", () => {
     await expect(call({ op: "archive" })).rejects.toThrow();
     await through(2);
     const r = await call({ op: "archive" });
-    expect(r.records).toHaveLength(3);
+    expect(r.records).toHaveLength(6);
     const anomalous = r.records!.filter(
       (x) => x.deleted && x.lastSeen > x.deleted,
     );
@@ -367,22 +372,26 @@ describe("paid-hint confidentiality", () => {
   });
 });
 
-describe("detective onboarding and browser-specific saves", () => {
+describe("detective onboarding and account-wide saves", () => {
   it("requires a detective name before the first investigation", async () => {
     await expect(
       dispatch(new TestStore(), "new-user", { op: "start" }, now),
     ).rejects.toThrow("detective name");
   });
-  it("gives the same account independent investigation slots in separate browsers", async () => {
+  it("resumes the same account and cinematic history in separate browsers", async () => {
     const a = "11111111-1111-4111-8111-111111111111",
       b = "22222222-2222-4222-8222-222222222222";
     await call({ op: "start", browserId: a });
     await call({ op: "submit", mission: 1, answer: "ORBIT", browserId: a });
     expect((await call({ op: "state", browserId: a })).state?.score).toBe(125);
-    expect((await call({ op: "state", browserId: b })).state?.score).toBe(0);
+    await call({ op: "cinematic-seen", mission: 2, browserId: a });
+    expect((await call({ op: "state", browserId: b })).state?.score).toBe(125);
     expect(
-      (await call({ op: "state", browserId: b })).state?.onboarded,
-    ).toBeUndefined();
+      (await call({ op: "state", browserId: b })).state?.cinematicsSeen,
+    ).toContain(2);
+    expect((await call({ op: "state", browserId: b })).state?.onboarded).toBe(
+      true,
+    );
   });
   it("shares creation quotas across browser slots rather than trusting a new browser identifier", async () => {
     const a = "11111111-1111-4111-8111-111111111111",
@@ -394,4 +403,165 @@ describe("detective onboarding and browser-specific saves", () => {
       "creation limit",
     );
   });
+});
+
+describe("deterministic story dialogue boundary", () => {
+  it("validates ECHO input and derives the revelation from real progress", async () => {
+    await through(1);
+    const early = await call({ op: "echo", text: "Who is ECHO?" });
+    expect(early.output).not.toContain("I am its recovery routine");
+    await expect(call({ op: "echo", text: "x".repeat(281) })).rejects.toThrow(
+      "Invalid input",
+    );
+    expect((await call({ op: "state" })).state?.score).toBe(125);
+    await through(5);
+    expect((await call({ op: "echo", text: "Who is ECHO?" })).output).toContain(
+      "I am its recovery routine",
+    );
+    expect((await call({ op: "state" })).state?.score).toBe(625);
+  });
+  it("serves presentation events without storing narrative in the player document", async () => {
+    await through(2);
+    const stored = structuredClone(db.docs.get("player:alice")?.value);
+    const state = (await call({ op: "state" })).state!;
+    expect(state.narrative?.events["2"]).toBeDefined();
+    expect(state.narrative?.events["3"]).toBeUndefined();
+    expect(db.docs.get("player:alice")?.value).toEqual(stored);
+    expect(db.docs.get("player:alice")?.value).not.toHaveProperty("narrative");
+  });
+});
+
+describe("legacy account save compatibility", () => {
+  it("imports the furthest owned browser save whole without modifying its evidence, bonuses or old record", async () => {
+    const browser = "11111111-1111-4111-8111-111111111111";
+    const legacy = {
+      id: "alice",
+      nickname: "Legacy Detective",
+      onboarded: true,
+      startedAt: 100,
+      progress: { "1": { attempts: 2, hints: 1, completedAt: 200 } },
+      fragments: [],
+      optIn: false,
+    };
+    db.docs.set(`player:alice:${browser}`, {
+      key: `player:alice:${browser}`,
+      value: structuredClone(legacy),
+      owner: "alice",
+      public: false,
+      version: 7,
+    });
+    const result = (
+      await call({
+        op: "state",
+        browserId: "22222222-2222-4222-8222-222222222222",
+      })
+    ).state!;
+    expect(result.chapter).toBe(2);
+    expect(result.score).toBe(90);
+    expect(result.nickname).toBe("Legacy Detective");
+    expect(result.cinematicsSeen).toEqual([1, 2]);
+    expect(db.docs.get(`player:alice:${browser}`)?.value).toEqual(legacy);
+    expect((await call({ op: "state" }, "bob")).state?.score).toBe(0);
+    await expect(call({ op: "cinematic-seen", mission: 6 })).rejects.toThrow(
+      "locked",
+    );
+  });
+});
+
+it("rotating browser identifiers cannot allocate extra account saves", async () => {
+  for (let i = 0; i < 20; i++)
+    await call({ op: "state", browserId: crypto.randomUUID() });
+  expect(
+    [...db.docs.keys()].filter((k) => k.startsWith("player:alice")),
+  ).toEqual(["player:alice"]);
+});
+
+describe("cooperative security regressions", () => {
+  it("does not write on rapid room-get events, but renews a heartbeat after15 seconds", async () => {
+    await call({ op: "profile", nickname: "Alice", optIn: false });
+    const code = (await call({ op: "room-create" })).room!.code;
+    const tx = new TestStore();
+    tx.docs = structuredClone(db.docs);
+    let writes = 0;
+    const put = tx.put.bind(tx);
+    tx.put = (...args) => {
+      writes++;
+      put(...args);
+    };
+    for (let i = 0; i < 100; i++)
+      await dispatch(tx, "alice", { op: "room-get", code }, now + 1000);
+    expect(writes).toBe(0);
+    await dispatch(tx, "alice", { op: "room-get", code }, now + 15000);
+    expect(writes).toBe(1);
+    await dispatch(tx, "alice", { op: "room-get", code }, now + 15001);
+    expect(writes).toBe(1);
+  });
+  it("allows only a waiting host to kick and refunds an empty abandoned room", async () => {
+    for (const uid of ["alice", "bob"])
+      await call({ op: "profile", nickname: uid, optIn: false }, uid);
+    for (let i = 0; i < 4; i++) {
+      const code = (await call({ op: "room-create" })).room!.code;
+      await call({ op: "room-join", code }, "bob");
+      await expect(call({ op: "room-kick", code }, "bob")).rejects.toThrow(
+        "Only the host",
+      );
+      expect(
+        (await call({ op: "room-kick", code })).room!.members,
+      ).toHaveLength(1);
+      await expect(call({ op: "room-get", code }, "bob")).rejects.toThrow(
+        "membership",
+      );
+      await call({ op: "room-leave", code });
+    }
+  });
+  it("normalizes names and rejects hidden, directional and stacked marks", async () => {
+    for (const nickname of [
+      "ab\u200Bcd",
+      "ab\u202Ecd",
+      "ab\u0085cd",
+      "a\u0338\u0338b",
+    ])
+      await expect(
+        call({ op: "profile", nickname, optIn: false }),
+      ).rejects.toThrow("visible");
+    expect(
+      (await call({ op: "profile", nickname: "Ｓａｔｗｉｋ", optIn: false }))
+        .state?.nickname,
+    ).toBe("Satwik");
+  });
+  it("accepts common ls flags and validates every cat path before collecting fragments", async () => {
+    await through(3);
+    expect(
+      (await call({ op: "terminal", command: "ls -la /logs" })).output,
+    ).toContain("access.log");
+    await expect(
+      call({ op: "terminal", command: "cat /logs/access.log /missing" }),
+    ).rejects.toThrow("File not found");
+    expect((await call({ op: "state" })).state?.fragments).toHaveLength(0);
+    expect(
+      (
+        await call({
+          op: "terminal",
+          command: "cat /logs/access.log /archive/backup.log",
+        })
+      ).state?.fragments,
+    ).toHaveLength(2);
+  });
+  it("does not allocate saves for a leaderboard read", async () => {
+    await call({ op: "leaderboard" }, "visitor");
+    expect(db.docs.size).toBe(0);
+  });
+});
+
+it("requires unsafe historical names to be replaced without losing progress", async () => {
+  await through(1);
+  const doc = db.docs.get("player:alice")!;
+  (doc.value as { nickname: string }).nickname = "bad\u202Ename";
+  const result = (await call({ op: "state" })).state!;
+  expect(result.onboarded).toBe(false);
+  expect(result.score).toBe(125);
+  expect(result.optIn).toBe(false);
+  await expect(call({ op: "finish", ending: "restore" })).rejects.toThrow(
+    "detective name",
+  );
 });

@@ -1,3 +1,4 @@
+import { publicRankingQuery } from "./rankings.ts";
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { randomBytes, createHash } from "node:crypto";
@@ -56,16 +57,34 @@ class SQLiteStore implements Store {
     this.writes.set(key, null);
   }
   async listPublic() {
-    return (
-      db
-        .prepare(
-          "SELECT value FROM documents WHERE public=1 AND key LIKE 'ranking:%' LIMIT 1000",
-        )
-        .all() as { value: string }[]
-    ).map((x) => JSON.parse(x.value) as Ranking);
+    return (db.prepare(publicRankingQuery).all() as { value: string }[]).map(
+      (x) => JSON.parse(x.value) as Ranking,
+    );
+  }
+  async listPlayerSaves(uid: string) {
+    const rows = db
+      .prepare(
+        "SELECT * FROM documents WHERE owner=? AND key LIKE 'player:%' LIMIT 32",
+      )
+      .all(uid) as {
+      key: string;
+      value: string;
+      owner: string;
+      public: number;
+      version: number;
+    }[];
+    return rows.map(
+      (r) =>
+        ({ ...r, value: JSON.parse(r.value), public: !!r.public }) as Document,
+    );
   }
   commit() {
     for (const [key, v] of this.writes) {
+      if (v && key === `ranking:${v.owner}`)
+        db.prepare(
+          "UPDATE documents SET public=0,version=version+1 WHERE owner=? AND key LIKE ?",
+        ).run(v.owner, `${key}:%`);
+
       if (!v) {
         db.prepare("DELETE FROM documents WHERE key=?").run(key);
         continue;

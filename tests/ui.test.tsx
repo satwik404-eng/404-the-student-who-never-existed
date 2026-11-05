@@ -25,14 +25,16 @@ describe("accessible starting experience", () => {
       screen.getByRole("button", { name: "Open the field guide" }),
     ).toBeTruthy();
   });
-  it("provides a skip control during the boot cinematic", () => {
+  it("provides a skip control during the boot cinematic", async () => {
     render(
       <MemoryRouter>
         <Boot />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("button", { name: "SKIP INTRO" })).toBeTruthy();
-    expect(screen.getByText("INITIALIZING ARCHIVE…")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "SKIP INTRO" }),
+    ).toBeTruthy();
+    expect(screen.getByText("SECURITY ARCHIVE / 02:17 AM")).toBeTruthy();
   });
   it("exposes a focusable modal with a close control", () => {
     render(
