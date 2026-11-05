@@ -6,11 +6,11 @@ A playable browser mystery created by **Satwik**. Recover Aarya Sen's erased ide
 
 The visual direction uses midnight black, electric cobalt and acid lime, with original SVG artwork. No paid image or AI service is required.
 
-## Cinematic story upgrade (feature branch)
+## Cinematic story upgrade
 
 Version 3 adds a five-scene, approximately 50-second **The Purge** prologue after sign-in and detective-name registration. A public transmission teaser contains no operator-deletion scene. All six chapters gain distinct replayable introductions, skippable recovery events, an evolving suspect board, browser-local theories/evidence connections, progression-aware ECHO dialogue and expanded endings with a recovered-perspective replay.
 
-The original puzzles, saves, rewards, both endings and multiplayer are retained. Story revelations are projected by the server from verified existing progress; no save reset is required. The security follow-up includes a ranking index/RPC migration. See [NARRATIVE_UPGRADE.md](NARRATIVE_UPGRADE.md) for the implementation and release checklist. This feature branch is **not published to production**.
+The original puzzles, saves, rewards, both endings and multiplayer are retained. Story revelations are projected by the server from verified existing progress; no save reset is required. The cinematic upgrade and security follow-up are deployed to production, including the ranking index/RPC migration. See [NARRATIVE_UPGRADE.md](NARRATIVE_UPGRADE.md) for implementation details and [RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md) for verified results and remaining limits.
 
 ## Play locally
 
@@ -42,7 +42,7 @@ Do not expose the development server on the public Internet. `npm run preview` p
 - Google-only production sign-in, PKCE callback, detective-name onboarding and account-wide investigation and cinematic history. Apple support is prepared but deferred.
 - Opt-in rankings built only from genuine server-verified completions; no fabricated players or scores.
 - Desktop/mobile layouts, keyboard controls, focus-trapped guide, reduced motion and muted-by-default audio.
-- Completion credits link to Satwik's GitHub profile and this repository. Set `VITE_LINKEDIN_URL` when the exact profile is available.
+- Completion credits link to Satwik's GitHub profile, this repository and LinkedIn profile.
 
 ## Cloud setup
 
@@ -89,6 +89,4 @@ All characters, institutions, records and security challenges are fictional. Ter
 
 ## Credits
 
-Created by [Satwik](https://github.com/satwik404-eng). [Project repository](https://github.com/satwik404-eng/404-the-student-who-never-existed).
-
-The repository remains private during development. Publishing the website does not make the source public.
+Created by [Satwik](https://github.com/satwik404-eng). [Project repository](https://github.com/satwik404-eng/404-the-student-who-never-existed). [Connect on LinkedIn](https://www.linkedin.com/in/satwik-sankrityayan-071397434/).

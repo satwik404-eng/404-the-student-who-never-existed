@@ -1,6 +1,6 @@
 # Cinematic Story Upgrade — v3
 
-This update extends the existing game on `feature/cinematic-story-v3`. Production has not been changed. The public deployment remains the approved original release until the owner approves a coordinated frontend/backend release.
+This update extends the existing game on `feature/cinematic-story-v3`. Following owner approval, the matching migration, Edge Function and cinematic frontend were released to production on 5 November 2026. See [RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md) for executed checks and current limits.
 
 ## Player flow
 
@@ -49,7 +49,7 @@ Do not deploy the new frontend against the old Edge Function: its gated timeline
 
 ## Existing limitations
 
-Apple login remains deferred. LinkedIn credits need the exact profile URL. The GitHub repository remains private. Daily managed backups, database network restrictions and a two-real-account hosted Realtime security test remain separate open infrastructure items from the earlier audit. No production infrastructure was changed by this narrative update.
+Apple login remains deferred. LinkedIn completion credits are configured with the owner's verified profile. Daily managed backups, database network restrictions and a two-real-account hosted Realtime security test remain separate open infrastructure items from the earlier audit.
 
 ## Cross-browser resume follow-up
 

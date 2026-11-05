@@ -35,8 +35,10 @@ The browser uses PKCE, removes the one-time callback code from the address bar, 
 - Review database network restrictions, retained daily backups and restore testing separately.
 - Scan all Git history for privileged credentials; never commit `.env*` except `.env.example`.
 
-The website can be public while its GitHub source remains private. The repository credit link will only be visible to GitHub users who have access until the owner chooses to publish the repository.
+Repository visibility is managed independently from website deployment. Never publish source or expand access without the owner's authorization.
 
 ## Security follow-up release
 
 After owner approval, apply `20261105094913_security_and_rankings.sql` before deploying the new Edge Function and frontend. It adds service-only ordered leaderboard reads, an ordering index, and atomic unpublication of legacy ranking rows when the canonical account ranking is written. Historical records are retained. Set optional `ALLOWED_ORIGIN` only to an exact HTTPS preview origin. The static frontend adds explicit HSTS and COOP headers.
+
+The migration, Edge Function version 4 and cinematic frontend were released on 5 November 2026. See [RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md) for evidence and outstanding hosted checks.
